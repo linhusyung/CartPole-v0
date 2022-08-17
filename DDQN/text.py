@@ -1,7 +1,7 @@
 import gym
 import torch
 from network_torch import DQN_torch
-import numpy as np
+
 class agent():
     def __init__(self):
         self.observation = env.reset()
