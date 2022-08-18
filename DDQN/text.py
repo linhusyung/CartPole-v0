@@ -25,3 +25,5 @@ if __name__ == '__main__':
             out=a.model(state)
             action=a.choose_action(out)
             observation, r, done, info = env.step(action)
+            if done:
+                break

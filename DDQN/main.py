@@ -10,14 +10,14 @@ class agent():
     def __init__(self):
         self.observation = env.reset()
         self.model = DQN_torch(state_dim=len(self.observation))
-        self.target_model=copy.deepcopy(self.model)
+        self.target_model=DQN_torch(state_dim=len(self.observation))
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.epoch = 500
         self.eps = 0.99
         self.replay_buffers = Replay_Buffers()
         self.gamma = 0.9
         self.loss_fn = torch.nn.MSELoss()
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-4)
 
     def np_to_tensor(self, np_data):
         return torch.tensor(np_data, dtype=torch.float32)
@@ -44,10 +44,14 @@ class agent():
             tuple(state_), tuple(next_state_), self.np_to_tensor(action_).to(self.device), self.np_to_tensor(
                 reward_).to(self.device), self.np_to_tensor(done).to(self.device)
 
-        Q = self.model(self.np_to_tensor(state_)).to(self.device)
-        Q_target_net=self.target_model(self.np_to_tensor(state_)).to(self.device)
-        argmaz_action = torch.argmax(Q, 1)
-        max_Q_=Q_target_net.gather(1, argmaz_action.unsqueeze(1).type(torch.int64)).squeeze(1)
+        Q=self.model(self.np_to_tensor(state_)).to(self.device)
+        #狀態t，給dqn
+        Q_next = self.model(self.np_to_tensor(next_state_)).to(self.device)
+        argmaz_action = torch.argmax(Q_next, 1)
+        #下一個狀態給dqn選最大的
+        Q_target_net = self.target_model(self.np_to_tensor(next_state_)).to(self.device)
+        max_Q_ = Q_target_net.gather(1, argmaz_action.unsqueeze(1).type(torch.int64)).squeeze(1)
+        #下一個狀態給Q_target,重dqn選最大的index給Q‘
         Q_target = reward_ + self.gamma * max_Q_ * (1 - done_)
         Q_eval = Q.gather(1, action_.unsqueeze(1).type(torch.int64)).squeeze(1)
 
@@ -76,7 +80,6 @@ if __name__ == '__main__':
             state = observation
             obe = a.np_to_tensor(observation)
             out = a.model(obe).to(a.device)
-            adsfasdf=a.target_model(obe).to(a.device)
             # print(out)
             action = a.choose_action(out)
             # print(action)
@@ -93,7 +96,7 @@ if __name__ == '__main__':
             if replay is not None:
                 a.tarin(replay)
             if count%5==0:
-                a.model=a.target_model
+                a.target_model.load_state_dict(a.model.state_dict())
             count+=1
 
             if done:
@@ -107,4 +110,3 @@ if __name__ == '__main__':
     a.save_model()
     plt.plot(b_list, reward_list)
     plt.show()
-    print(max(reward_list))
