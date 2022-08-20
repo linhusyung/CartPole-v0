@@ -1,14 +1,14 @@
 import gym
 import torch
 import numpy as np
-from network_torch import DQN_torch, Replay_Buffers
+from network_torch import Dueling_network, Replay_Buffers
 import matplotlib.pyplot as plt
 
 
 class agent():
     def __init__(self):
         self.observation = env.reset()
-        self.model = DQN_torch(state_dim=len(self.observation))
+        self.model = Dueling_network(state_dim=len(self.observation))
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.epoch = 500
         self.eps = 0.99
@@ -52,7 +52,7 @@ class agent():
         loss.backward()
         self.optimizer.step()
     def save_model(self):
-        torch.save(self.model.state_dict(), 'model/model_params.pth')
+        torch.save(self.model.state_dict(), 'model/Dueling_dqn.pth')
 
 if __name__ == '__main__':
     env = gym.make('CartPole-v0')
