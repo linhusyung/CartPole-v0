@@ -14,31 +14,70 @@ class agent():
         self.epoch = 500
         self.eps = 0.99
         self.replay_buffers = Replay_Buffers()
-        self.gamma = 0.9
+        self.gamma = 0.99
         self.loss_fn = torch.nn.MSELoss()
-        # self.optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3)
+        self.Critic_optimizer = torch.optim.Adam(self.Critic.parameters(), lr=5e-4)
+        self.Actor_optimizer = torch.optim.Adam(self.Actor.parameters(), lr=5e-5)
+        self.action_space = np.array([0, 1])
 
     def np_to_tensor(self, np_data):
         return torch.tensor(np_data, dtype=torch.float32)
 
-    def choose_action(self, out):
-        if np.random.random() < self.eps:
-            return np.random.randint(0, 2)
-        else:
-            return int(out.argmax().cpu().numpy())
+    def choose_action(self, action_probability):
+        action_p = action_probability.detach().cpu().numpy()
+        action = np.random.choice(self.action_space, p=action_p)
+        return action
 
-    def tarin(self, replay):
-        pass
+    def train(self, state, next_state, reward, action_probability, action):
+        V = self.Critic(state).to(a.device)
+        next_V = self.Critic(next_state).to(a.device)
+        TD_error = self.np_to_tensor(reward) + self.gamma * next_V - V
+        Critic_loss = self.loss_fn(self.np_to_tensor(reward) + self.gamma * next_V, V)
+
+        self.Critic_optimizer.zero_grad()
+        Critic_loss.backward()
+        self.Critic_optimizer.step()
+
+        pi = -torch.log(action_probability[action]) * TD_error.detach()
+        self.Actor_optimizer.zero_grad()
+        pi.backward()
+        self.Actor_optimizer.step()
 
 
 if __name__ == '__main__':
     env = gym.make('CartPole-v0')
     a = agent()
-    # state = a.np_to_tensor(a.observation)
-    # Q = a.Critic(state).to(a.device)
-    # pi = a.Actor(state).to(a.device)
-    # print('Q',Q,'pi',pi)
+    reward_list = []
+    i_list = []
     for i in range(a.epoch):
+        i_list.append(i)
+        reward_sum = 0
         observation = env.reset()
+        print('第', i, '次遊戲')
         while True:
-            pass
+            # env.render()
+            state = observation
+            obe = a.np_to_tensor(observation)
+
+            action_probability = a.Actor(obe).to(a.device)
+            action = a.choose_action(action_probability)
+
+            observation, r, done, info = env.step(action)
+
+            next_state = observation
+            x, v, theta, omega = next_state
+            r1 = (env.x_threshold - abs(x)) / env.x_threshold - 0.8
+            r2 = (env.theta_threshold_radians - abs(theta)) / env.theta_threshold_radians - 0.5
+            reward = r1 + r2
+            reward_sum += r
+
+            next_obe = a.np_to_tensor(next_state)
+
+            a.train(obe, next_obe, reward, action_probability, action)
+
+            if done:
+                reward_list.append(reward_sum)
+                print(reward_sum)
+                break
+    plt.plot(i_list, reward_list)
+    plt.show()

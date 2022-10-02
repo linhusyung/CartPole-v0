@@ -10,21 +10,26 @@ class Actor(nn.Module):
         super(Actor, self).__init__()
         self.Actor_h1 = nn.Linear(state_dim, 512)
         self.Actor_h1.weight.data.normal_(0, 0.1)
+        self.ln_h1 = nn.LayerNorm(512)
 
         self.Actor_h2 = nn.Linear(512, 256)
         self.Actor_h2.weight.data.normal_(0, 0.1)
+        self.ln_h2 = nn.LayerNorm(256)
 
         self.Actor_h3 = nn.Linear(256, 64)
         self.Actor_h3.weight.data.normal_(0, 0.1)
+        self.ln_h3 = nn.LayerNorm(64)
 
         self.Actor_h4 = nn.Linear(64, 2)
         self.Actor_h4.weight.data.normal_(0, 0.1)
 
-        self.softmax=nn.Softmax(dim=-1)
+        self.softmax = nn.Softmax(dim=-1)
+
+
     def forward(self, x):
-        x = F.relu(self.Actor_h1(x))
-        x = F.relu(self.Actor_h2(x))
-        x = F.relu(self.Actor_h3(x))
+        x = self.ln_h1(F.leaky_relu_(self.Actor_h1(x)))
+        x = self.ln_h2(F.leaky_relu_(self.Actor_h2(x)))
+        x = self.ln_h3(F.leaky_relu_(self.Actor_h3(x)))
         x = self.softmax(self.Actor_h4(x))
         return x
 
@@ -34,20 +39,24 @@ class Critic(nn.Module):
         super(Critic, self).__init__()
         self.Critic_h1 = nn.Linear(state_dim, 512)
         self.Critic_h1.weight.data.normal_(0, 0.1)
+        self.ln_c1 = nn.LayerNorm(512)
 
-        self.Critic_h2 = nn.Linear(512, 256)
+        self.Critic_h2 = nn.Linear(512 , 256)
         self.Critic_h2.weight.data.normal_(0, 0.1)
+        self.ln_c2 = nn.LayerNorm(256)
 
         self.Critic_h3 = nn.Linear(256, 64)
         self.Critic_h3.weight.data.normal_(0, 0.1)
+        self.ln_c3 = nn.LayerNorm(64)
 
-        self.Critic_h4 = nn.Linear(64, 2)
+        self.Critic_h4 = nn.Linear(64, 1)
         self.Critic_h4.weight.data.normal_(0, 0.1)
 
+        self.ln = nn.LayerNorm(300)
     def forward(self, x):
-        x = F.relu(self.Critic_h1(x))
-        x = F.relu(self.Critic_h2(x))
-        x = F.relu(self.Critic_h3(x))
+        x = self.ln_c1(F.leaky_relu_(self.Critic_h1(x)))
+        x = self.ln_c2(F.leaky_relu_(self.Critic_h2(x)))
+        x = self.ln_c3(F.leaky_relu_(self.Critic_h3(x)))
         x = self.Critic_h4(x)
         return x
 
@@ -59,8 +68,9 @@ class Replay_Buffers():
         self.buffer = deque([], maxlen=self.buffer_size)
         self.batch = 20
 
-    def write_Buffers(self, state, next_state, reward, action, done):
-        once = {'state': state, 'next_state': next_state, 'reward': reward, 'action': action, 'done': done, }
+    def write_Buffers(self, state, next_state, reward, action, done, action_probability):
+        once = {'state': state, 'next_state': next_state, 'reward': reward, 'action': action, 'done': done,
+                'action_probability': action_probability}
         self.buffer.append(once)
         if len(self.buffer) > self.batch:
             return sample(self.buffer, self.batch)
