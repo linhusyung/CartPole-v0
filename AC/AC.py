@@ -12,12 +12,10 @@ class agent():
         self.Critic = Critic(state_dim=len(self.observation))
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.epoch = 500
-        self.eps = 0.99
-        self.replay_buffers = Replay_Buffers()
         self.gamma = 0.99
         self.loss_fn = torch.nn.MSELoss()
-        self.Critic_optimizer = torch.optim.Adam(self.Critic.parameters(), lr=5e-4)
-        self.Actor_optimizer = torch.optim.Adam(self.Actor.parameters(), lr=5e-5)
+        self.Critic_optimizer = torch.optim.Adam(self.Critic.parameters(), lr=2e-4)
+        self.Actor_optimizer = torch.optim.Adam(self.Actor.parameters(), lr=4e-4)
         self.action_space = np.array([0, 1])
 
     def np_to_tensor(self, np_data):
@@ -49,6 +47,7 @@ if __name__ == '__main__':
     a = agent()
     reward_list = []
     i_list = []
+    best_reward=0
     for i in range(a.epoch):
         i_list.append(i)
         reward_sum = 0
@@ -65,19 +64,24 @@ if __name__ == '__main__':
             observation, r, done, info = env.step(action)
 
             next_state = observation
-            x, v, theta, omega = next_state
-            r1 = (env.x_threshold - abs(x)) / env.x_threshold - 0.8
-            r2 = (env.theta_threshold_radians - abs(theta)) / env.theta_threshold_radians - 0.5
-            reward = r1 + r2
             reward_sum += r
 
             next_obe = a.np_to_tensor(next_state)
 
-            a.train(obe, next_obe, reward, action_probability, action)
+            x, v, theta, omega = next_state
+            r1 = (env.x_threshold - abs(x)) / env.x_threshold - 0.8
+            r2 = (env.theta_threshold_radians - abs(theta)) / env.theta_threshold_radians - 0.5
+            reward = r1 + r2
+
+            if best_reward==200:
+                pass
+            else:
+                a.train(obe, next_obe, reward, action_probability, action)
 
             if done:
                 reward_list.append(reward_sum)
                 print(reward_sum)
+                best_reward=reward_sum
                 break
     plt.plot(i_list, reward_list)
     plt.show()
