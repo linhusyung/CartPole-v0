@@ -13,7 +13,7 @@ from DDPG_network import *
 
 class agent():
     def __init__(self):
-        self.epoch = 1
+        self.epoch = 10
         self.state_dim = len(env.reset())
 
         self.Actor = Actor(self.state_dim)
@@ -22,7 +22,10 @@ class agent():
         self.Critic = Critic(self.state_dim, 4)
         self.target_Critic = Critic(self.state_dim, 4)
 
+        self.loss = torch.nn.MSELoss()
         self.replay = Replay_Buffers()
+        self.gamma = 0.9
+        self.optimizer = torch.optim.Adam(self.Critic.parameters(), lr=1e-4)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     def to_tensor(self, data):
@@ -32,7 +35,7 @@ class agent():
         return torch.from_numpy(data).to(torch.float32)
 
     def tuple_of_tensor_to_tensor(self, tuplt_of_tensor):
-        return torch.unsqueeze(torch.stack(tuplt_of_tensor, dim=0).squeeze(), 1)
+        return torch.stack(tuplt_of_tensor, dim=0)
 
     def tensor_to_np(self, data):
         return data.cpu().detach().numpy()
@@ -54,15 +57,25 @@ class agent():
             action.append(replay[i]['action'])
             done.append(replay[i]['done'])
         return self.tuple_of_tensor_to_tensor(state), self.tuple_of_tensor_to_tensor(
-            state_next), reward, self.tuple_of_tensor_to_tensor(action).cpu(), done
+            state_next), self.to_tensor(reward).unsqueeze(1), self.tuple_of_tensor_to_tensor(
+            action).cpu(), done
 
     def train(self, replay):
         state, state_next, reward, action, done = self.read_replay(replay)
-        print(self.target_Actor(state).to(self.device))
-        print(self.target_Critic(state, action).to(self.device))
+
         # updata Critic
+        target_action = self.target_Actor(state_next).to(self.device).detach()
+        target_Q = self.target_Critic(state_next, target_action.cpu()).to(self.device).detach()
+        target = reward.to(self.device) + self.gamma * target_Q
 
+        Q = self.Critic(state, action).to(self.device)
+        loss = self.loss(target, Q)
+        self.optimizer.zero_grad()
+        loss.backward(retain_graph=True)
+        self.optimizer.step()
 
+        # updata Actor
+        
 
 if __name__ == '__main__':
     env = gym.make('BipedalWalker-v3')
@@ -81,6 +94,6 @@ if __name__ == '__main__':
             replay_sample = a.replay.write_Buffers(state_now, a.np_to_tensor(observation), reward, action, done)
             if replay_sample is not None:
                 a.train(replay_sample)
-                break
+                print('asdfasf')
             if done:
                 break
