@@ -7,25 +7,28 @@
 import gym
 import torch
 import numpy as np
-
+import matplotlib.pyplot as plt
 from DDPG_network import *
 
-
+np.random.seed(0)
 class agent():
     def __init__(self):
-        self.epoch = 10
+        self.epoch = 400
         self.state_dim = len(env.reset())
 
         self.Actor = Actor(self.state_dim)
         self.target_Actor = Actor(self.state_dim)
+        self.target_Actor.load_state_dict(self.target_Actor.state_dict())
 
-        self.Critic = Critic(self.state_dim, 4)
-        self.target_Critic = Critic(self.state_dim, 4)
+        self.Critic = Critic(self.state_dim, 1)
+        self.target_Critic = Critic(self.state_dim, 1)
+        self.target_Critic.load_state_dict(self.Critic.state_dict())
 
         self.loss = torch.nn.MSELoss()
         self.replay = Replay_Buffers()
-        self.gamma = 0.9
-        self.optimizer = torch.optim.Adam(self.Critic.parameters(), lr=1e-4)
+        self.gamma = 0.99
+        self.Critic_optimizer = torch.optim.Adam(self.Critic.parameters(), lr=0.001)
+        self.Actor_optimizer = torch.optim.Adam(self.Actor.parameters(), lr=0.002)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     def to_tensor(self, data):
@@ -58,31 +61,52 @@ class agent():
             done.append(replay[i]['done'])
         return self.tuple_of_tensor_to_tensor(state), self.tuple_of_tensor_to_tensor(
             state_next), self.to_tensor(reward).unsqueeze(1), self.tuple_of_tensor_to_tensor(
-            action).cpu(), done
+            action).cpu(), self.to_tensor(done).unsqueeze(1)
+
+    def soft_update(self, target, source, t):
+        for target_param, source_param in zip(target.parameters(), source.parameters()):
+            target_param.data.copy_((1 - t) * target_param.data + t * source_param.data)
 
     def train(self, replay):
         state, state_next, reward, action, done = self.read_replay(replay)
 
         # updata Critic
-        target_action = self.target_Actor(state_next).to(self.device).detach()
-        target_Q = self.target_Critic(state_next, target_action.cpu()).to(self.device).detach()
-        target = reward.to(self.device) + self.gamma * target_Q
-
-        Q = self.Critic(state, action).to(self.device)
+        with torch.no_grad():
+            target_action = self.target_Actor(state_next).to(self.device)
+            target_Q = self.target_Critic(state_next, target_action.cpu()).to(self.device)
+            target = reward.to(self.device) + self.gamma * target_Q * (1 - done).to(self.device)
+        Q = self.Critic(state, action.detach()).to(self.device)
         loss = self.loss(target, Q)
-        self.optimizer.zero_grad()
-        loss.backward(retain_graph=True)
-        self.optimizer.step()
+        self.Critic_optimizer.zero_grad()
+        loss.backward()
+        self.Critic_optimizer.step()
 
         # updata Actor
-        
+        mu = self.Actor(state).to(self.device)
+        u_A_q = self.Critic(state, mu.cpu()).to(self.device)
+        actor_loss = -torch.mean(u_A_q)
+        self.Actor_optimizer.zero_grad()
+        actor_loss.backward()
+        self.Actor_optimizer.step()
+
+        # updata Actor_target
+        self.soft_update(self.target_Actor, self.Actor, 0.005)
+        # updata Critic_target
+        self.soft_update(self.target_Critic, self.Critic, 0.005)
+
+    def save_model(self, path: str):
+        torch.save(self.Actor.state_dict(), path)
+
 
 if __name__ == '__main__':
-    env = gym.make('BipedalWalker-v3')
+    env = gym.make('Pendulum-v0')
     a = agent()
-
+    reward_list = []
+    i_list = []
     for i in range(a.epoch):
         observation = env.reset()
+        reward_sum = 0
+        i_list.append(i)
         print('第', i, '次遊戲')
         while True:
             # env.render()
@@ -90,10 +114,18 @@ if __name__ == '__main__':
             action = a.choose_action(a.Actor(state_now).to(a.device))
 
             observation, reward, done, info = env.step(a.tensor_to_np(action))
-
             replay_sample = a.replay.write_Buffers(state_now, a.np_to_tensor(observation), reward, action, done)
             if replay_sample is not None:
                 a.train(replay_sample)
-                print('asdfasf')
+
+            reward_sum += reward
             if done:
+                reward_list.append(reward_sum)
+                print(reward_sum,'max',max(reward_list))
+                if reward_sum == max(reward_list):
+                    a.save_model('model/model_params_max.pth')
                 break
+    a.save_model('model/model_params.pth')
+    print(max(reward_list))
+    plt.plot(i_list, reward_list)
+    plt.show()

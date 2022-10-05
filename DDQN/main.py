@@ -91,7 +91,6 @@ if __name__ == '__main__':
             r2 = (env.theta_threshold_radians - abs(theta)) / env.theta_threshold_radians - 0.5
             reward = r1 + r2
             replay = a.replay_buffers.write_Buffers(state, next_state, reward, action, done)
-
             reward_sum += r
             if replay is not None:
                 a.tarin(replay)

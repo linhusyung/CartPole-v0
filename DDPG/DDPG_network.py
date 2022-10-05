@@ -15,7 +15,7 @@ class Actor(nn.Module):
         self.actor_fc2.weight.data.normal_(0, 0.1)
         self.actor_fc2_ = nn.LayerNorm(32)
 
-        self.actor_fc3 = nn.Linear(32, 4)
+        self.actor_fc3 = nn.Linear(32, 1)
         self.actor_fc3.weight.data.normal_(0, 0.1)
 
     def forward(self, x):
@@ -26,7 +26,7 @@ class Actor(nn.Module):
         x = self.actor_fc2_(x)
 
         x = torch.tanh(self.actor_fc3(x))
-        return x
+        return x*2
 
 
 class Critic(nn.Module):
@@ -56,9 +56,9 @@ class Critic(nn.Module):
 
 class Replay_Buffers():
     def __init__(self):
-        self.buffer_size = 5000
+        self.buffer_size = 1000000
         self.buffer = deque([], maxlen=self.buffer_size)
-        self.batch = 20
+        self.batch = 1314
 
     def write_Buffers(self, state, next_state, reward, action, done):
         once = {'state': state, 'next_state': next_state, 'reward': reward, 'action': action, 'done': done, }
