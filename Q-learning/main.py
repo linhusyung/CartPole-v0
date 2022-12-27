@@ -54,6 +54,7 @@ if __name__ == '__main__':
     for _ in range(100):
         obs = Q.env.reset()
         while True:
+            Q.env.render()
             state = obs
             action = np.argmax(Q.qtable[state])
             obs, reward, done, info = Q.env.step(action)
