@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from network import *
 from torch import optim
+from torch.utils.tensorboard import SummaryWriter
 
 
 class agent():
@@ -88,6 +89,7 @@ class agent():
         q1_value = self.Q_net1(state, new_actions)
         q2_value = self.Q_net2(state, new_actions)
         actor_loss = torch.mean(-self.log_alpha.exp() * entropy - torch.min(q1_value, q2_value))
+        # actor_loss = ((self.log_alpha * new_actions) - torch.min(q1_value, q2_value)).mean()
         self.policy_optimizer.zero_grad()
         actor_loss.backward()
         self.policy_optimizer.step()
@@ -115,6 +117,8 @@ class agent():
 
 
 if __name__ == '__main__':
+    writer = SummaryWriter()
+
     env = gym.make('Pendulum-v0')
     s_dim = env.observation_space.shape[0]
     a_dim = env.action_space.shape[0]
@@ -128,6 +132,7 @@ if __name__ == '__main__':
     reward_sum = []
     reward_mean = []
     b_list = []
+
     for _ in range(200):
         print(f'第{_}次遊戲')
         observation = env.reset()
@@ -136,9 +141,10 @@ if __name__ == '__main__':
         while True:
             # env.render()
             state = a.np_to_tensor(observation)
-            action, log_prob = a.actor.sample(state)
+            action, _ = a.actor(state)
+            # print(action, state.shape)
             action = a.tensor_to_numpy(action)
-
+            # print(action)
             observation, r, done, info = env.step(action)
             next_state = a.np_to_tensor(observation)
 
@@ -152,8 +158,9 @@ if __name__ == '__main__':
                 print('reward', reward)
                 reward_sum.append(reward)
                 reward_mean.append(np.mean(reward_sum))
-                if reward == max(reward_sum):
-                    a.save_best()
+                writer.add_scalar("reward", reward)
+                # if reward == max(reward_sum):
+                #     a.save_best()
                 break
 
     l1, = plt.plot(b_list, reward_mean)
