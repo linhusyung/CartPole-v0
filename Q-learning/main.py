@@ -25,13 +25,14 @@ class Q_learning():
 
 if __name__ == '__main__':
     Q = Q_learning()
-    print(Q.qtable.shape)
-
+    print('state',Q.env.observation_space.n)
     for _ in range(10000):
         obs = Q.env.reset()
         while True:
             # Q.env.render()
             state = obs
+            print('state',obs)
+            break
             action = Q.choose_action(state)
             obs, reward, done, info = Q.env.step(action)
 
@@ -49,18 +50,18 @@ if __name__ == '__main__':
                 break
 
     # text
-    print('開始測試')
-    success = 0
-    for _ in range(100):
-        obs = Q.env.reset()
-        while True:
-            Q.env.render()
-            state = obs
-            action = np.argmax(Q.qtable[state])
-            obs, reward, done, info = Q.env.step(action)
-            if done:
-                if reward != 0:
-                    success += 1
-                    print('reward', reward, 'done', done)
-                break
-    print('成功率',success/100)
+    # print('開始測試')
+    # success = 0
+    # for _ in range(100):
+    #     obs = Q.env.reset()
+    #     while True:
+    #         Q.env.render()
+    #         state = obs
+    #         action = np.argmax(Q.qtable[state])
+    #         obs, reward, done, info = Q.env.step(action)
+    #         if done:
+    #             if reward != 0:
+    #                 success += 1
+    #                 print('reward', reward, 'done', done)
+    #             break
+    # print('成功率',success/100)

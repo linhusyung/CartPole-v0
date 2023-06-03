@@ -46,14 +46,6 @@ class Actor(nn.Module):
 
         self.apply(weights_init_)
 
-    # def forward(self, state):
-    #     out = F.relu(self.linear1(state))
-    #     out = F.relu(self.linear2(out))
-    #     out = F.relu(self.linear3(out))
-    #     mean = self.mean(out)
-    #     log_std = self.std(out)
-    #     log_std = torch.clamp(log_std, min=-20, max=2)
-    #     return mean, log_std
     def forward(self, state):
         out = F.relu(self.linear1(state))
         out = F.relu(self.linear2(out))
@@ -62,36 +54,33 @@ class Actor(nn.Module):
         log_std = self.std(out)
         std = F.softplus(log_std)
         dist = Normal(mean, std)
+
         normal_sample = dist.rsample()  # 在标准化正态分布上采样
         log_prob = dist.log_prob(normal_sample)  # 计算该值的标准正太分布上的概率
         action = torch.tanh(normal_sample)  # 对数值进行tanh
         # 计算tanh_normal分布的对数概率密度
-        log_prob = log_prob - torch.log(1 - torch.tanh(action).pow(2) + 1e-7)  # 为了提升目标对应的概率值
+        log_prob = log_prob - torch.log(2*(1 - torch.tanh(action).pow(2)) + 1e-7)  # 为了提升目标对应的概率值
         action = action * 2  # 对action求取范围
         return action, log_prob
 
-    def sample(self, state, epsilon=1e-6):
-        mean, log_std = self.forward(state)
-        std = log_std.exp()
+    def train_forward(self, state):
+        out = F.relu(self.linear1(state))
+        out = F.relu(self.linear2(out))
+        out = F.relu(self.linear3(out))
+        mean = self.mean(out)
+        log_std = self.std(out)
+        std = F.softplus(log_std)
+        dist = Normal(mean, std)
 
-        normal = Normal(mean, std)
-        x_t = normal.rsample()
-        action = torch.tanh(mean)
-        log_prob = normal.log_prob(x_t) - torch.log(1 - action.pow(2) + epsilon)
-        action = action * 2
-
+        normal_sample = dist.rsample()  # 在标准化正态分布上采样
+        log_prob = dist.log_prob(mean)  # 计算该值的标准正太分布上的概率
+        action = torch.tanh(mean)  # 对数值进行tanh
+        # 计算tanh_normal分布的对数概率密度
+        log_prob = log_prob - torch.log(2*(1 - torch.tanh(action).pow(2)) + 1e-7)  # 为了提升目标对应的概率值
+        action = action * 2  # 对action求取范围
         return action, log_prob
 
-    def get_action(self, state):
-        mean, log_std = self.forward(state)
-        std = log_std.exp()
 
-        normal = Normal(mean, std)
-        x_t = normal.rsample()
-        action = torch.tanh(x_t)
-
-        action = action * 2
-        return action
 
 
 class Replay_Buffers():

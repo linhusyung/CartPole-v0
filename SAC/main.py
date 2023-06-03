@@ -30,7 +30,9 @@ class agent():
         self.q2_optimizer = optim.Adam(self.Q_net2.parameters(), lr=q_lr)
         self.policy_optimizer = optim.Adam(self.actor.parameters(), lr=pi_lr)
 
-        self.log_alpha = torch.tensor(np.log(0.01), dtype=torch.float)
+        self.log_alpha = torch.tensor(np.log(0.05), dtype=torch.float)
+        # self.log_alpha = torch.tensor(np.log(0.01), dtype=torch.float)
+        # self.log_alpha = torch.tensor(np.log(0), dtype=torch.float)
         self.log_alpha.requires_grad = True
         self.log_alpha_optimizer = torch.optim.Adam([self.log_alpha], lr=alpha_lr)
 
@@ -65,12 +67,16 @@ class agent():
     def train(self, replay):
         state, next_state, reward, action, done = self.batch_resize(replay)
         # 更新Q網路
-        action_next, log_prob = a.actor.sample(next_state)
+        action_next, log_prob = a.actor.train_forward(next_state)
+        # writer.add_scalar("action_next", torch.mean(action_next), global_step=loss_step)
+        # writer.add_scalar("log_prob", torch.mean(log_prob), global_step=loss_step)
         entropy = -log_prob
         Q1_value = self.Q_net1_target(next_state, action_next)
         Q2_value = self.Q_net2_target(next_state, action_next)
         next_value = torch.min(Q1_value, Q2_value) + self.log_alpha.exp() * entropy
         td_target = reward + self.gamma * next_value * (1 - done)
+
+        writer.add_scalar("td_target", torch.mean(td_target), global_step=loss_step)
 
         critic_1_loss = torch.mean(F.mse_loss(self.Q_net1(state, action), td_target.detach()))
         critic_2_loss = torch.mean(F.mse_loss(self.Q_net2(state, action), td_target.detach()))
@@ -82,6 +88,8 @@ class agent():
         self.q2_optimizer.zero_grad()
         critic_2_loss.backward()
         self.q2_optimizer.step()
+        writer.add_scalar("critic_1_loss", critic_1_loss, global_step=loss_step)
+        writer.add_scalar("critic_2_loss", critic_2_loss, global_step=loss_step)
 
         # 更新actor
         new_actions, log_prob = self.actor(state)
@@ -89,10 +97,10 @@ class agent():
         q1_value = self.Q_net1(state, new_actions)
         q2_value = self.Q_net2(state, new_actions)
         actor_loss = torch.mean(-self.log_alpha.exp() * entropy - torch.min(q1_value, q2_value))
-        # actor_loss = ((self.log_alpha * new_actions) - torch.min(q1_value, q2_value)).mean()
         self.policy_optimizer.zero_grad()
         actor_loss.backward()
         self.policy_optimizer.step()
+        writer.add_scalar("actor_loss", actor_loss, global_step=loss_step)
 
         # 更新alpha值
         alpha_loss = torch.mean(
@@ -100,6 +108,9 @@ class agent():
         self.log_alpha_optimizer.zero_grad()
         alpha_loss.backward()
         self.log_alpha_optimizer.step()
+
+        writer.add_scalar("alpha_loss", alpha_loss, global_step=loss_step)
+        writer.add_scalar("alpha", self.log_alpha.exp(), global_step=loss_step)
 
         self.soft_update(self.Q_net1, self.Q_net1_target)
         self.soft_update(self.Q_net2, self.Q_net2_target)
@@ -117,8 +128,6 @@ class agent():
 
 
 if __name__ == '__main__':
-    writer = SummaryWriter()
-
     env = gym.make('Pendulum-v0')
     s_dim = env.observation_space.shape[0]
     a_dim = env.action_space.shape[0]
@@ -126,6 +135,7 @@ if __name__ == '__main__':
     q_lr = 3e-3
     alpha_lr = 3e-4
     target_entropy = -env.action_space.shape[0]
+    # target_entropy = -10
     gamma = 0.99
     tau = 0.005
     a = agent(s_dim, a_dim, q_lr, pi_lr, target_entropy, gamma, tau, alpha_lr)
@@ -133,7 +143,11 @@ if __name__ == '__main__':
     reward_mean = []
     b_list = []
 
-    for _ in range(200):
+    writer = SummaryWriter('runs/temperature_0.05')
+    global_step = 0
+    loss_step = 0
+
+    for _ in range(50):
         print(f'第{_}次遊戲')
         observation = env.reset()
         reward = 0
@@ -142,7 +156,8 @@ if __name__ == '__main__':
             # env.render()
             state = a.np_to_tensor(observation)
             action, _ = a.actor(state)
-            # print(action, state.shape)
+            writer.add_scalar("entropy", -_, global_step=global_step)
+            global_step += 1
             action = a.tensor_to_numpy(action)
             # print(action)
             observation, r, done, info = env.step(action)
@@ -153,18 +168,17 @@ if __name__ == '__main__':
 
             if replay is not None:
                 a.train(replay)
+                loss_step += 1
 
             if done:
                 print('reward', reward)
                 reward_sum.append(reward)
                 reward_mean.append(np.mean(reward_sum))
-                writer.add_scalar("reward", reward)
-                # if reward == max(reward_sum):
-                #     a.save_best()
+                writer.add_scalar("reward", reward, global_step=loss_step)
                 break
 
     l1, = plt.plot(b_list, reward_mean)
     l2, = plt.plot(b_list, reward_sum, color='red', linewidth=1.0, linestyle='--')
     plt.legend(handles=[l1, l2], labels=['reward_mean', 'reward_sum'], loc='best')
     plt.show()
-    a.save_()
+    # a.save_()
